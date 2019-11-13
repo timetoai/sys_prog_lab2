@@ -8,7 +8,7 @@
 #include "message.h"
 
 struct message *msg;
-char *f, *mac;
+char *f, *mac, *ans;
 void atexit_handler();
 
 int main()
@@ -32,11 +32,12 @@ int main()
     msg = (struct message*) malloc(7);
     mac = (char*) malloc(15);
     f = (char*) malloc(1);
+    ans = (char*) malloc(1);
 
     while(1)
     {
-        fputs("Enter mac address in format ****:****:****\n", stdout);
-        fgets(mac, 15, stdin);
+        printf("Enter mac address in format ****:****:****\n");
+        scanf("%s", mac);
         bool valid = true;
         for (int i = 0; i < 11 ; i+=5)
         {
@@ -50,18 +51,21 @@ int main()
             }
             if (!valid) {break;}
         }
-        if (!valid) {fputs("Incorrect mac address\n", stdout); continue;}
+        if (!valid) {printf("Incorrect mac address\n"); continue;}
 
-        fputs("Enter flag (ADD 0, DELETE 1, CHECK 2): ", stdout);
-        fgets(f, 1, stdin);
-        if (!(isdigit(*f) || atoi(f) < 2)) {fputs("Incorrect flag\n", stdout); continue;}
+        printf("Enter flag (ADD 0, DELETE 1, CHECK 2): ");
+        scanf("%s", f);
+        if (!(f[0] >= '0' && f[0] <= '2')) {printf("Incorrect flag\n"); continue;}
 
-        msg->mac_addr[0] = strtol(mac, NULL, 16);
-        msg->mac_addr[1] = strtol(mac + 5, NULL, 16);
-        msg->mac_addr[2] = strtol(mac + 10, NULL, 16);
+        msg->mac.oct[0] = strtol(mac, NULL, 16);
+        msg->mac.oct[1] = strtol(mac + 5, NULL, 16);
+        msg->mac.oct[2] = strtol(mac + 10, NULL, 16);
         msg->flag = atoi(f);
-        printf("Sending...\n");
+        printf("lab2client: Sending...\n");
+        
         sendto(sock, (void*) msg, sizeof(msg), 0, (struct sockaddr *)&addr, sizeof(addr));
+        //recvfrom(sock, (void *) ans, 1, 0, NULL, NULL);
+        //printf("lab2client: Got answer with code %d", *ans);
     }
 
     close(sock);
