@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <cerrno>
+#include <time.h>
 #include "message.h"
 
 typedef struct s_list
@@ -27,11 +28,13 @@ struct message_with_addr
 
 list *mlb, *mle;
 static const char *optString = "wdl:a:p:vh";
-int l2wait = 0, l2port = 3425, msg_count = 0;
-char *l2logfile = NULL, *l2addr = NULL;
-
-int sock;
+int l2wait = 0, l2port, msg_count = 0, sock;
+char *l2logfile;
+uint32_t l2addr = 0;
 struct sockaddr_in addr;
+bool init_port = false, init_wait = false, init_addr = false, init_log = false;
+FILE *fl, *fm;
+time_t t0 = time(NULL);
 
 void atexit_handler();
 void display_usage();
@@ -41,6 +44,8 @@ void *message_handler(void *argv);
 list* check_mac(struct mac_addr *mac);
 int add_mac(struct mac_addr *mac);
 int delete_mac(struct mac_addr *mac);
+void server();
+uint32_t *getaddr(char *temp);
 
 int main(int argc, char **argv)
 {
@@ -72,20 +77,35 @@ int main(int argc, char **argv)
 	sigprocmask(SIG_UNBLOCK, &sigset, NULL);
 
 	//Обработка ключей
+	bool daemon = false;
 	int opt = getopt(argc, argv, optString);
+	char *temp_addr, *temp_log;
 	while(opt != -1)
 	{
 		switch(opt)
 		{
 			case 'w':
+				init_wait = true;
+				l2wait = strtol(argv[optind], NULL, 10);
+				if (l2wait == 0 && *argv[optind] != '0') 
+				{ printf("Wrong usage of -w\n"); display_usage(); }
 				break;
 			case 'd':
+				daemon = true;
 				break;
 			case 'l':
+				init_log = true;
+				temp_log = argv[optind - 1];
 				break;
 			case 'a':
+				init_addr = true;
+				temp_addr = argv[optind - 1];
 				break;
 			case 'p':
+				init_port = true;
+				l2port = strtol(argv[optind - 1], NULL, 10);
+				if (l2port == 0 && *argv[optind - 1] != '0') 
+				{ printf("Wrong usage of -p\n"); display_usage(); }
 				break;
 			case 'v':
 				printf("lab2server version 1.0");
@@ -96,21 +116,72 @@ int main(int argc, char **argv)
 		}
 		opt = getopt(argc, argv, optString);
 	}
+	// Установка адреса сервера
+	char *envptr;
+	if (init_addr)
+	{
+		uint32_t *u = getaddr(temp_addr);
+		if (u) { l2addr = *u; free(u); }
+		else { printf("Wrong usage of -a\n"); display_usage(); }
+	} else if (envptr = getenv("L2ADDR")) 
+	{
+		uint32_t *u = getaddr(temp_addr);
+		if (u) { l2addr = *u; free(u); }
+		else { l2addr = INADDR_LOOPBACK; }
+	} else { l2addr = INADDR_LOOPBACK; }
 
+	if (!init_port)
+	{
+		envptr = NULL;
+		if (envptr = getenv("L2PORT")) 
+		{
+			if (l2port = strtol(envptr, NULL, 10) == 0) 
+			{
+				if (*envptr == '0') { l2port = 0;}
+				else { l2port = 3425; }
+			}
+		} else { l2port = 3425; }
+	}
+
+	if (init_log)
+	{
+		envptr = NULL;
+		if ((fl = fopen(l2logfile, "a")) == NULL)
+		{
+			if (envptr = getenv("L2LOGFILE")) { fl = fopen(envptr, "a"); }
+		}
+		if (fl == NULL) { fl = fopen("/tmp/lab2.log", "a"); }
+	} else { fl = fopen("/tmp/lab2.log", "a"); }
+	if (fl == NULL) { printf("lab2server: Error: Can't access log file\n"); exit(1); }
+
+	if (daemon) 
+	{
+        int pid = fork();
+        if (pid < 0) { printf("lab2server: Error: Start daemon failed\n"); exit(1); }
+        if (pid == 0) { server(); }
+        if (pid > 0) { printf("lab2server: Daemon successfully started\n"); exit(0); }
+	}
+	else { server(); }
+}
+
+void server()
+{
 	//Подготовка сокета к работе
+	printf("lab2server: Starting server on %d.%d.%d.%d:%d\n", l2addr >> 24, l2addr << 8 >> 24, \
+		l2addr << 16 >> 24, l2addr << 24 >> 24, l2port);
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock < 0)
     {
-        perror("socket");
+        printf("lab2server: Error creating socket\n");
         exit(1);
     }
     addr.sin_family = AF_INET;
     addr.sin_port = htons(l2port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = htonl(l2addr);
     if(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
-        perror("bind");
-        exit(2);
+        printf("lab2server: Error binding socket");
+        exit(1);
     }
     //Считывание сообщений
     int bytes_read;
@@ -127,10 +198,10 @@ int main(int argc, char **argv)
         mwa->msg = msg;
         mwa->client_addr = client_addr;
         mwa->client_addr_len = client_addr_len;
+        if (l2wait) { sleep(l2wait); }
         TEMP_FAILURE_RETRY(pthread_create(&thread, NULL, message_handler, (void*)mwa));
+        msg_count++;
     }
-
-    return 0;
 }
 
 void *message_handler(void *argv)
@@ -222,6 +293,23 @@ int delete_mac(struct mac_addr *mac)
 	else { return 1; }
 }
 
+// Парсинг адреса
+uint32_t *getaddr(char *temp)
+{
+	uint32_t *a = (uint32_t*)malloc(4);
+	int add;
+	for (int i = 3; i > 0; i--)
+	{
+		if (*temp == '0' && *(temp + 1) == '.')  { temp += 2; }
+		else if (add = strtol(temp, &temp, 10)) 
+			{ *a += add << 8 * i;  if (*temp != '.') { free(a); return NULL; } temp++; }
+			else { free(a); return NULL; }
+	}
+	if (add = strtol(temp, &temp, 10)) { *a += add; }
+	else if (*temp != '0') { free(a); return NULL; }
+	return a;
+}
+
 void display_usage()
 {
 	printf("Displaying usage\n");
@@ -230,7 +318,13 @@ void display_usage()
 
 void atexit_handler()
 {
-	if (mlb) { while(mlb) { mlb = mlb->next; free(mlb->prev); }	}
+	list* tl;
+	while(mlb) { tl = mlb; mlb = mlb->next; free(tl); }
+	if (fl != NULL) { fclose(fl); }
+	// time_t t2 = time(NULL);
+	// struct tm *t2m = localtime(&t2);
+	// printf("%d.%d.%d %d:%d:%d\n", t2m->tm_mday, t2m->tm_mon, t2m->tm_year, \
+	// 	t2m->tm_hour, t2m->tm_min, t2m->tm_sec); //ДД.ММ.ГГ чч:мм:сс
 }
 
 void exit_signal_handler(int signum)
