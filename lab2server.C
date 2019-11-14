@@ -18,6 +18,13 @@ typedef struct s_list
   struct s_list *next;
 } list;
 
+struct message_with_addr
+{
+	struct message *msg;
+	struct sockaddr *client_addr;
+	socklen_t *client_addr_len;
+};
+
 list *mlb, *mle;
 static const char *optString = "wdl:a:p:vh";
 int l2wait = 0, l2port = 3425, msg_count = 0;
@@ -99,7 +106,7 @@ int main(int argc, char **argv)
     }
     addr.sin_family = AF_INET;
     addr.sin_port = htons(l2port);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
         perror("bind");
@@ -110,9 +117,17 @@ int main(int argc, char **argv)
     while(1)
     {
     	pthread_t thread;
+    	struct sockaddr *client_addr = (struct sockaddr*)malloc(24);
+    	socklen_t *client_addr_len = (socklen_t*)malloc(1);
+    	*client_addr_len = sizeof(client_addr);
 		struct message *msg = (struct message*) malloc(7);
-        bytes_read = recvfrom(sock, (void *) msg, 7, 0, NULL, NULL);
-        TEMP_FAILURE_RETRY(pthread_create(&thread, NULL, message_handler, (void*)msg));
+
+        recvfrom(sock, (void *) msg, 7, 0, client_addr, client_addr_len);
+        struct message_with_addr *mwa = (struct message_with_addr*)malloc(sizeof(struct message_with_addr));
+        mwa->msg = msg;
+        mwa->client_addr = client_addr;
+        mwa->client_addr_len = client_addr_len;
+        TEMP_FAILURE_RETRY(pthread_create(&thread, NULL, message_handler, (void*)mwa));
     }
 
     return 0;
@@ -120,20 +135,23 @@ int main(int argc, char **argv)
 
 void *message_handler(void *argv)
 {
-	struct message *msg = (struct message*)argv;
+	struct message_with_addr *mwa = (struct message_with_addr*)argv;
+	struct message *msg = mwa->msg;
+	struct sockaddr *client_addr = mwa->client_addr;
+	socklen_t *client_addr_len = mwa->client_addr_len;
 	char ans;
 	switch (msg->flag)
 	{
 		case 0: //ADD
-			printf("lab2serverReceived MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
 			ans = add_mac(&msg->mac); //0 - mac добавлен, 1 - mac уже существует
 			break;
 		case 1: //DELETE
-			printf("lab2serverReceived MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
 			ans = delete_mac(&msg->mac); //0 - mac удалено, 1 - mac'а нет в списке
 			break;
 		case 2: //CHECK
-			printf("lab2serverReceived MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
 			if(check_mac(&msg->mac)) { ans = 1; } else { ans = 0; } // 1 - mac в списке, 0 - mac не в списке
 			break;
 		default:
@@ -143,7 +161,9 @@ void *message_handler(void *argv)
 	}
     free(msg);
     printf("lab2server: Answer is %d\n", ans);
-    //sendto(sock, (void*) &ans, sizeof(ans), 0, (struct sockaddr *)&addr, sizeof(addr));
+    sendto(sock, (void*) &ans, sizeof(ans), 0, client_addr, *client_addr_len);
+    free(client_addr);
+    free(client_addr_len);
     return 0;
 }
 
@@ -190,8 +210,10 @@ int delete_mac(struct mac_addr *mac)
 	{
 		if (list *found = check_mac(mac))
 		{
-			found->prev->next = found->next;
-			found->next->prev = found->prev;
+			if (found->prev) { found->prev->next = found->next; }
+			else if (found->next) { mlb = found->next; } else { mlb = NULL; }
+			if (found->next) { found->next->prev = found->prev; }
+			else if (found->prev) { mle = found->prev; } else { mle = NULL; }
 			free(found);
 			return 0;
 		}

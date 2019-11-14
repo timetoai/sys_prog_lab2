@@ -9,6 +9,7 @@
 
 struct message *msg;
 char *f, *mac, *ans;
+int sock;
 void atexit_handler();
 
 int main()
@@ -16,7 +17,6 @@ int main()
     //Обработка завершения программы
     atexit(atexit_handler);
 
-    int sock;
     struct sockaddr_in addr;
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -62,10 +62,11 @@ int main()
         msg->mac.oct[2] = strtol(mac + 10, NULL, 16);
         msg->flag = atoi(f);
         printf("lab2client: Sending...\n");
-        
-        sendto(sock, (void*) msg, sizeof(msg), 0, (struct sockaddr *)&addr, sizeof(addr));
-        //recvfrom(sock, (void *) ans, 1, 0, NULL, NULL);
-        //printf("lab2client: Got answer with code %d", *ans);
+
+        connect(sock, (struct sockaddr *)&addr, sizeof(addr));
+        send(sock, (void*) msg, sizeof(msg), 0);
+        recv(sock, (void *) ans, 1, 0);
+        printf("lab2client: Got answer with code %d\n\n", *ans);
     }
 
     close(sock);
@@ -75,6 +76,7 @@ int main()
 
 void atexit_handler()
 {
+    close(sock);
     free(mac);
     free(f);
     free(msg);
