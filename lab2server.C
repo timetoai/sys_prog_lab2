@@ -43,10 +43,12 @@ void log_signal_handler(int signum);
 void *message_handler(void *argv);
 list* check_mac(struct mac_addr *mac);
 int add_mac(struct mac_addr *mac);
+int raw_add_mac(struct mac_addr *mac);
 int delete_mac(struct mac_addr *mac);
 void server();
 uint32_t *getaddr(char *temp);
 char *get_timestamp();
+void read_macs();
 
 #define M_LOG(_f, f_, ...) {char *formated = (char*)malloc(35); sprintf(formated, (f_), ##__VA_ARGS__);\
 	char *timestamp = get_timestamp(); printf("lab2server: %-35s %s\n", formated, timestamp);\
@@ -160,6 +162,7 @@ int main(int argc, char **argv)
 	} else { fl = fopen("/tmp/lab2.log", "a"); }
 	if (fl == NULL) { M_LOG(fl, "Error: Can't access log file") exit(1); }
 
+	read_macs();	
 	if (daemon) 
 	{
         int pid = fork();
@@ -285,6 +288,24 @@ int add_mac(struct mac_addr *mac)
 	}
 }
 
+int raw_add_mac(struct mac_addr *mac)
+{
+	if (mlb)
+	{
+		mle->next = (list*)malloc(sizeof(list));
+		mle = mle->next;
+		memcpy((void*)&mle->mac, (void*)mac, sizeof(mac));
+		return 0;
+	}
+	else
+	{
+		mlb = (list*)malloc(sizeof(list));
+		mle = mlb;
+		memcpy((void*)&mle->mac, (void*)mac, sizeof(mac));
+		return 0;
+	}
+}
+
 int delete_mac(struct mac_addr *mac)
 {
 	if (mlb)
@@ -329,7 +350,16 @@ void display_usage()
 void atexit_handler()
 {
 	list* tl;
-	while(mlb) { tl = mlb; mlb = mlb->next; free(tl); }
+	FILE *ptrFile = fopen("macs", "wb");
+	if (ptrFile == NULL) { M_LOG(fl, "Error: Can't save mac addreses") }
+	while(mlb) 
+	{ 
+		fwrite((void*)&mlb->mac, 6, 1, ptrFile);
+		tl = mlb; 
+		mlb = mlb->next; 
+		free(tl); 
+	}
+	if (ptrFile != NULL) { fclose(ptrFile); }
 	if (fl != NULL) { fclose(fl); }
 }
 
@@ -355,4 +385,25 @@ char *get_timestamp()
 	sprintf(buff, "%.2d.%.2d.%.4d %.2d:%.2d:%.2d", t2m->tm_mday, t2m->tm_mon, t2m->tm_year + 1900, \
 		t2m->tm_hour, t2m->tm_min, t2m->tm_sec); //ДД.ММ.ГГГГ чч:мм:сс
 	return buff;
+}
+
+void read_macs()
+{
+	FILE *ptrFile;
+	if (ptrFile = fopen("macs", "rb"))
+	{
+		fseek(ptrFile , 0 , SEEK_END);
+		long lSize = ftell(ptrFile);
+  		rewind (ptrFile);
+		if (lSize % 6 == 0)
+		{
+			while (lSize -= 6)
+			{
+				struct mac_addr *mac = (struct mac_addr*)malloc(6);
+				fread((void*)mac, 6, 1, ptrFile);
+				raw_add_mac(mac);
+			}
+		}
+  		fclose(ptrFile);
+	}
 }
