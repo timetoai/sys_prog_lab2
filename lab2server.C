@@ -34,7 +34,7 @@ uint32_t l2addr = 0;
 struct sockaddr_in addr;
 bool init_port = false, init_wait = false, init_addr = false, init_log = false;
 FILE *fl, *fm;
-time_t t0 = time(NULL);
+time_t t0;
 
 void atexit_handler();
 void display_usage();
@@ -46,9 +46,15 @@ int add_mac(struct mac_addr *mac);
 int delete_mac(struct mac_addr *mac);
 void server();
 uint32_t *getaddr(char *temp);
+char *get_timestamp();
+
+#define M_LOG(_f, f_, ...) {char *formated = (char*)malloc(35); sprintf(formated, (f_), ##__VA_ARGS__);\
+	char *timestamp = get_timestamp(); printf("lab2server: %-35s %s\n", formated, timestamp);\
+	fprintf((_f), "lab2server: %-35s %s\n", formated, timestamp); free(timestamp); free(formated);} //nextleveltricks
 
 int main(int argc, char **argv)
 {
+	t0 = time(NULL);
 	//Обработка завершения программы
 	atexit(atexit_handler);
 
@@ -152,14 +158,14 @@ int main(int argc, char **argv)
 		}
 		if (fl == NULL) { fl = fopen("/tmp/lab2.log", "a"); }
 	} else { fl = fopen("/tmp/lab2.log", "a"); }
-	if (fl == NULL) { printf("lab2server: Error: Can't access log file\n"); exit(1); }
+	if (fl == NULL) { M_LOG(fl, "Error: Can't access log file") exit(1); }
 
 	if (daemon) 
 	{
         int pid = fork();
-        if (pid < 0) { printf("lab2server: Error: Start daemon failed\n"); exit(1); }
+        if (pid < 0) { M_LOG(fl, "Error: Start daemon failed") exit(1); }
         if (pid == 0) { server(); }
-        if (pid > 0) { printf("lab2server: Daemon successfully started\n"); exit(0); }
+        if (pid > 0) { M_LOG(fl, "Daemon successfully started") exit(0); }
 	}
 	else { server(); }
 }
@@ -167,12 +173,12 @@ int main(int argc, char **argv)
 void server()
 {
 	//Подготовка сокета к работе
-	printf("lab2server: Starting server on %d.%d.%d.%d:%d\n", l2addr >> 24, l2addr << 8 >> 24, \
-		l2addr << 16 >> 24, l2addr << 24 >> 24, l2port);
+	M_LOG(fl, "Starting server on %d.%d.%d.%d:%d", l2addr >> 24, l2addr << 8 >> 24, \
+		l2addr << 16 >> 24, l2addr << 24 >> 24, l2port)
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
     if(sock < 0)
     {
-        printf("lab2server: Error creating socket\n");
+        M_LOG(fl, "Error creating socket")
         exit(1);
     }
     addr.sin_family = AF_INET;
@@ -180,7 +186,7 @@ void server()
     addr.sin_addr.s_addr = htonl(l2addr);
     if(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
-        printf("lab2server: Error binding socket");
+        M_LOG(fl, "Error binding socket")
         exit(1);
     }
     //Считывание сообщений
@@ -193,7 +199,11 @@ void server()
     	*client_addr_len = sizeof(client_addr);
 		struct message *msg = (struct message*) malloc(7);
 
-        recvfrom(sock, (void *) msg, 7, 0, client_addr, client_addr_len);
+		int res;
+        do 
+        {
+        	res = recvfrom(sock, (void *) msg, 7, 0, client_addr, client_addr_len);
+        } while (res < 1);
         struct message_with_addr *mwa = (struct message_with_addr*)malloc(sizeof(struct message_with_addr));
         mwa->msg = msg;
         mwa->client_addr = client_addr;
@@ -321,19 +331,28 @@ void atexit_handler()
 	list* tl;
 	while(mlb) { tl = mlb; mlb = mlb->next; free(tl); }
 	if (fl != NULL) { fclose(fl); }
-	// time_t t2 = time(NULL);
-	// struct tm *t2m = localtime(&t2);
-	// printf("%d.%d.%d %d:%d:%d\n", t2m->tm_mday, t2m->tm_mon, t2m->tm_year, \
-	// 	t2m->tm_hour, t2m->tm_min, t2m->tm_sec); //ДД.ММ.ГГ чч:мм:сс
 }
 
 void exit_signal_handler(int signum)
 {
-	printf("lab2server: Exit by signal with number %d\n", signum);
+	M_LOG(fl, "Exit by signal with number %d", signum)
 	exit(0);
 }
 
 void log_signal_handler(int signum)
 {
-	printf("lab2server: logging...\n");
+	time_t t1 = time(NULL);
+	double d = difftime(t1, t0);
+	M_LOG(fl, "Work time is %.3f seconds", d)
+	M_LOG(fl, "Handled %d messages", msg_count)
+}
+
+char *get_timestamp()
+{
+	char *buff = (char*)malloc(21);
+	time_t t2 = time(NULL);
+	struct tm *t2m = localtime(&t2);
+	sprintf(buff, "%.2d.%.2d.%.4d %.2d:%.2d:%.2d", t2m->tm_mday, t2m->tm_mon, t2m->tm_year + 1900, \
+		t2m->tm_hour, t2m->tm_min, t2m->tm_sec); //ДД.ММ.ГГГГ чч:мм:сс
+	return buff;
 }
