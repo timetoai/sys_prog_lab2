@@ -63,6 +63,9 @@ int main(int argc, char **argv)
     //Обработка сигналов
     struct sigaction act;
     sigset_t sigset;
+    
+    sigfillset(&sigset);
+    sigprocmask(SIG_BLOCK, &sigset, 0);
 
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGINT);
@@ -343,7 +346,18 @@ uint32_t *getaddr(char *temp)
 
 void display_usage()
 {
-	printf("Displaying usage\n");
+	printf("Usage: lab2server [Options]\n\
+Program starts UDP server, that proccess actions with mac addreses\n\n\
+Options:\n\
+-w N\t N - seconds between receiving and handling message (0 by default)\n\
+-d  \t Start program as daemon\n\
+-l L\t L - path to log file(/tmp/lab2.log by default)\n\
+-a I\t I - ip addres, that server is listening (127.0.0.1 by default)\n\
+-p P\t P - number of port, that server is listening (3425 by default)\n\
+-v  \t Display program version\n\
+-h  \t Display usage\n\n\
+If N,L,I,P isn't set, program checks environment variables L2WAIT, L2LOGFILE,\
+L2ADDR, L2PORT\n");
 	exit(0);
 }
 
