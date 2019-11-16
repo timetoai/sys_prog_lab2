@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 				{ printf("Wrong usage of -p\n"); display_usage(); }
 				break;
 			case 'v':
-				printf("lab2server version 1.0");
+				printf("lab2server version 1.0\n");
 				exit(0);
 			case 'h':
 			default:
@@ -409,7 +409,7 @@ void read_macs()
 		fseek(ptrFile , 0 , SEEK_END);
 		long lSize = ftell(ptrFile);
   		rewind (ptrFile);
-		if (lSize % 6 == 0)
+		if (lSize && lSize % 6 == 0)
 		{
 			while (lSize -= 6)
 			{
