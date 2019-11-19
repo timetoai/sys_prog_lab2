@@ -141,7 +141,7 @@ int main(int argc, char **argv)
 		else { printf("Wrong usage of -a\n"); display_usage(); }
 	} else if (envptr = getenv("L2ADDR")) 
 	{
-		uint32_t *u = getaddr(temp_addr);
+		uint32_t *u = getaddr(envptr);
 		if (u) { l2addr = *u; free(u); }
 		else { l2addr = INADDR_LOOPBACK; }
 	} else { l2addr = INADDR_LOOPBACK; }
@@ -151,15 +151,14 @@ int main(int argc, char **argv)
 		envptr = NULL;
 		if (envptr = getenv("L2PORT")) 
 		{
-			if (l2port = strtol(envptr, NULL, 10) == 0) 
+			if ((l2port = strtol(envptr, NULL, 10)) == 0) 
 			{
 				if (*envptr == '0') { l2port = 0;}
 				else { l2port = 3425; }
 			}
 		} else { l2port = 3425; }
 	}
-
-	if (init_log)
+	if (!init_log)
 	{
 		envptr = NULL;
 		if ((fl = fopen(l2logfile, "a")) == NULL)
@@ -169,7 +168,11 @@ int main(int argc, char **argv)
 		if (fl == NULL) { fl = fopen("/tmp/lab2.log", "a"); }
 	} else { fl = fopen("/tmp/lab2.log", "a"); }
 	if (fl == NULL) { M_LOG(fl, "Error: Can't access log file") exit(1); }
-
+	if (!init_wait)
+	{
+		envptr = NULL;
+		if (envptr = getenv("L2WAIT")) { (l2wait = strtol(envptr, NULL, 10)); }
+	}
 	read_macs();	
 	if (daemon) 
 	{
