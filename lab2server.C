@@ -35,6 +35,7 @@ struct sockaddr_in addr;
 bool init_port = false, init_wait = false, init_addr = false, init_log = false;
 FILE *fl, *fm;
 time_t t0;
+pthread_mutex_t mutex;
 
 void atexit_handler();
 void display_usage();
@@ -83,9 +84,13 @@ int main(int argc, char **argv)
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = log_signal_handler;
 	act.sa_mask = sigset;
+	act.sa_flags |= SA_ONSTACK;
 	sigaction(SIGUSR1, &act, 0);
 
 	sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+
+	//Создание мьютекса
+	pthread_mutex_init(&mutex, NULL);
 
 	//Обработка ключей
 	bool daemon = false;
@@ -227,6 +232,7 @@ void *message_handler(void *argv)
 	struct sockaddr *client_addr = mwa->client_addr;
 	socklen_t *client_addr_len = mwa->client_addr_len;
 	char ans;
+	pthread_mutex_lock(&mutex);
 	switch (msg->flag)
 	{
 		case 0: //ADD
@@ -246,6 +252,7 @@ void *message_handler(void *argv)
       		ans = 2;
 			break;
 	}
+	pthread_mutex_unlock(&mutex);
     free(msg);
     printf("lab2server: Answer is %d\n", ans);
     sendto(sock, (void*) &ans, sizeof(ans), 0, client_addr, *client_addr_len);
@@ -363,6 +370,7 @@ L2ADDR, L2PORT\n");
 
 void atexit_handler()
 {
+	pthread_mutex_destroy(&mutex);
 	list* tl;
 	FILE *ptrFile = fopen("macs", "wb");
 	if (ptrFile == NULL) { M_LOG(fl, "Error: Can't save mac addreses") }
