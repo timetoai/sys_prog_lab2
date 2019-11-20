@@ -96,12 +96,12 @@ int main(int argc, char** argv)
 
     while(1)
     {
-        printf("Enter mac address in format ****:****:****\n");
+        printf("Enter mac address in format **:**:**:**:**:**\n");
         scanf("%s", mac);
         bool valid = true;
-        for (int i = 0; i < 11 ; i+=5)
+        for (int i = 0; i < 16 ; i+=3)
         {
-            for (int j = 0; j < 4; ++j)
+            for (int j = 0; j < 2; ++j)
             {
                 if (!isxdigit(mac[i + j])) 
                 {
@@ -117,9 +117,9 @@ int main(int argc, char** argv)
         scanf("%s", f);
         if (!(f[0] >= '0' && f[0] <= '2')) {printf("Incorrect flag\n"); continue;}
 
-        msg->mac.oct[0] = strtol(mac, NULL, 16);
-        msg->mac.oct[1] = strtol(mac + 5, NULL, 16);
-        msg->mac.oct[2] = strtol(mac + 10, NULL, 16);
+        msg->mac.oct[0] = strtol(mac, NULL, 16)*256 + strtol(mac + 3, NULL, 16);
+        msg->mac.oct[1] = strtol(mac + 6, NULL, 16)*256 + strtol(mac + 9, NULL, 16);
+        msg->mac.oct[2] = strtol(mac + 12, NULL, 16)*256 + strtol(mac + 15, NULL, 16);
         msg->flag = atoi(f);
         printf("lab2client: Sending...\n");
 

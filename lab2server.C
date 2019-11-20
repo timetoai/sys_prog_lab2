@@ -239,15 +239,18 @@ void *message_handler(void *argv)
 	switch (msg->flag)
 	{
 		case 0: //ADD
-			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x:%x:%x:%x flag=%d\n", msg->mac.oct[0]>>8, msg->mac.oct[0] % 256,\
+			msg->mac.oct[1]>>8, msg->mac.oct[1] % 256, msg->mac.oct[2]>>8, msg->mac.oct[2] % 256, msg->flag);
 			ans = add_mac(&msg->mac); //0 - mac добавлен, 1 - mac уже существует
 			break;
 		case 1: //DELETE
-			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x:%x:%x:%x flag=%d\n", msg->mac.oct[0]>>8, msg->mac.oct[0] % 256,\
+			msg->mac.oct[1]>>8, msg->mac.oct[1] % 256, msg->mac.oct[2]>>8, msg->mac.oct[2] % 256, msg->flag);		
 			ans = delete_mac(&msg->mac); //0 - mac удалено, 1 - mac'а нет в списке
 			break;
 		case 2: //CHECK
-			printf("lab2server: Received MAC: %x:%x:%x flag=%d\n", msg->mac.oct[0], msg->mac.oct[1], msg->mac.oct[2], msg->flag);
+			printf("lab2server: Received MAC: %x:%x:%x:%x:%x:%x flag=%d\n", msg->mac.oct[0]>>8, msg->mac.oct[0] % 256,\
+			msg->mac.oct[1]>>8, msg->mac.oct[1] % 256, msg->mac.oct[2]>>8, msg->mac.oct[2] % 256, msg->flag);		
 			if(check_mac(&msg->mac)) { ans = 1; } else { ans = 0; } // 1 - mac в списке, 0 - mac не в списке
 			break;
 		default:
@@ -422,11 +425,12 @@ void read_macs()
   		rewind (ptrFile);
 		if (lSize && lSize % 6 == 0)
 		{
-			while (lSize -= 6)
+			while (lSize)
 			{
 				struct mac_addr *mac = (struct mac_addr*)malloc(6);
 				fread((void*)mac, 6, 1, ptrFile);
 				raw_add_mac(mac);
+				lSize -= 6;
 			}
 		}
   		fclose(ptrFile);
