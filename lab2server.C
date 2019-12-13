@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = log_signal_handler;
 	act.sa_mask = sigset;
-	act.sa_flags |= SA_ONSTACK;
+	act.sa_flags |= SA_ONRESTART;
 	sigaction(SIGUSR1, &act, 0);
 
 	sigprocmask(SIG_UNBLOCK, &sigset, NULL);
